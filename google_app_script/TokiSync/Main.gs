@@ -89,6 +89,8 @@ function doPost(e) {
         });
       } else if (data.type === "history_get")
         result = checkDownloadHistory(data, rootFolderId);
+      else if (data.type === "migrate")
+        result = migrateLegacyStructure(rootFolderId);
       // [Viewer Migration] Isolated Routing
       else if (data.type && data.type.startsWith("view_")) {
         result = View_Dispatcher(data);
