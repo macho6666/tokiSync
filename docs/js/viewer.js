@@ -98,7 +98,7 @@ function renderEpisodeList(books, seriesId) {
             meta = formatSize(book.size);
 
             const name = book.name.toLowerCase();
-            if (name.endsWith('.cbz') || name.endsWith('.zip')) {
+            if (name.endsWith('.cbz') || name.endsWith('.zip') || name.endsWith('.epub')) {
                 icon = '📖';
                 clickHandler = () => loadViewer(index); // Launch Viewer
             }
