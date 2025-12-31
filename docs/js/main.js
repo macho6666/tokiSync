@@ -336,7 +336,7 @@ function loadDomains() {
     const vMode = localStorage.getItem('toki_v_mode') || '1page';
     const vCover = (localStorage.getItem('toki_v_cover') === 'true');
     const vRtl = (localStorage.getItem('toki_v_rtl') === 'true');
-    const vEngine = localStorage.getItem('toki_v_engine') || 'foliate';
+    const vEngine = localStorage.getItem('toki_v_engine') || 'legacy'; // Default to Legacy (Rollback)
 
     if(document.getElementById('pref_2page')) document.getElementById('pref_2page').checked = (vMode === '2page');
     if(document.getElementById('pref_cover')) document.getElementById('pref_cover').checked = vCover;

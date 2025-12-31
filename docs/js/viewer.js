@@ -455,7 +455,7 @@ async function fetchAndUnzip(fileId, totalSize, onProgress) {
     // Check for EPUB
     if (zip.file("OEBPS/content.opf") || zip.file("OPS/content.opf") || zip.file("mimetype")) {
         // EPUB Detected
-        const engine = localStorage.getItem('toki_v_engine') || 'foliate';
+        const engine = localStorage.getItem('toki_v_engine') || 'legacy'; // Default to Legacy
         console.log(`📘 EPUB Detected (Engine: ${engine})`);
 
         if (engine === 'legacy') {
