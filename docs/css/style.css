@@ -420,23 +420,46 @@ h1 {
 }
 
 /* Header & Footer inside Controls Layer */
+/* Header & Footer inside Controls Layer */
 .viewer-header, .viewer-footer {
   position: absolute;
   left: 0; 
   width: 100%;
   pointer-events: auto; /* Re-enable clicks for buttons */
-  transition: opacity 0.3s;
+  transition: opacity 0.3s, transform 0.3s; /* Add transform transition */
   opacity: 0; /* Hidden by default */
   background: rgba(0, 0, 0, 0.8);
 }
 
-.viewer-header { top: 0; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
-.viewer-footer { bottom: 0; display: flex; flex-direction: column; padding: 10px; gap: 10px; box-sizing: border-box; }
+.viewer-header { 
+    top: 0; 
+    height: 50px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    padding: 0 20px; 
+    box-sizing: border-box; 
+    transform: translateY(-100%); /* Slide out up */
+}
+
+.viewer-footer { 
+    bottom: 0; 
+    display: flex; 
+    flex-direction: column; 
+    padding: 10px; 
+    gap: 10px; 
+    box-sizing: border-box; 
+    transform: translateY(100%); /* Slide out down */
+}
 
 /* Show Controls Class */
-.viewer-controls.show .viewer-header,
+.viewer-controls.show .viewer-header {
+  opacity: 1;
+  transform: translateY(0);
+}
 .viewer-controls.show .viewer-footer {
   opacity: 1;
+  transform: translateY(0);
 }
 
 /* Remove old hover logic if we use explicit toggle */
