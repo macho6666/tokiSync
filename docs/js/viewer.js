@@ -204,16 +204,13 @@ async function loadViewer(index, isContinuous = false) {
 
         if (!result || (result.type === 'images' && result.images.length === 0)) throw new Error("콘텐츠를 찾을 수 없습니다.");
 
-        if (result.type === 'epub') {
-            vState.epubMode = true;
-            updateButtonStates(); // Sync UI
-            renderFoliateMode(result.blob);
-            return; // Stop here for EPUB
-        } else if (result.type === 'epub_legacy') {
+        if (result.type === 'epub_legacy') {
             vState.epubMode = true;
             updateButtonStates(); // Sync UI
             renderLegacyMode(result.content);
             return;
+        } else if (result.type === 'epub') {
+             throw new Error("지원되지 않는 EPUB 형식입니다.");
         } else {
             vState.epubMode = false;
             updateButtonStates(); // Sync UI
@@ -529,26 +526,21 @@ async function fetchAndUnzip(fileId, totalSize, onProgress) {
             // Do NOT return here. Fall through to Image Extraction loop below.
         } else {
             // Text EPUB detected
-            const engine = localStorage.getItem('toki_v_engine') || 'legacy'; // Default to Legacy
-            console.log(`📘 Text EPUB Detected (Engine: ${engine})`);
+            console.log(`📘 Text EPUB Detected (Using Built-in Viewer)`);
     
-            if (engine === 'legacy') {
-                 let htmlContent = "";
-                 // Find chapter.xhtml or any HTML
-                 let targetFile = zip.file("OEBPS/Text/chapter.xhtml");
-                 if (!targetFile) {
-                     const htmlFiles = files.filter(f => f.match(/\.(xhtml|html)$/i));
-                     if (htmlFiles.length > 0) targetFile = zip.file(htmlFiles[0]);
-                 }
-                 if (targetFile) {
-                     htmlContent = await targetFile.async("string");
-                     return { type: 'epub_legacy', content: htmlContent };
-                 }
-            } 
-            
-            // Foliate Mode
-            const file = new File([combinedBytes], "content.epub", { type: 'application/epub+zip' });
-            return { type: 'epub', blob: file }; 
+            let htmlContent = "";
+            // Find chapter.xhtml or any HTML
+            let targetFile = zip.file("OEBPS/Text/chapter.xhtml");
+            if (!targetFile) {
+                const htmlFiles = files.filter(f => f.match(/\.(xhtml|html)$/i));
+                if (htmlFiles.length > 0) targetFile = zip.file(htmlFiles[0]);
+            }
+            if (targetFile) {
+                htmlContent = await targetFile.async("string");
+                return { type: 'epub_legacy', content: htmlContent };
+            }
+            // Fallback if no HTML found?
+            throw new Error("EPUB 내에서 텍스트 파일을 찾을 수 없습니다.");
         }
     }
 
@@ -560,51 +552,6 @@ async function fetchAndUnzip(fileId, totalSize, onProgress) {
         }
     }
     return { type: 'images', images: imageUrls };
-}
-
-/* Foliate Integration Logic */
-async function renderFoliateMode(blob) {
-    const container = document.getElementById('viewerScrollContainer');
-    if (!container) {
-        const content = document.getElementById('viewerContent');
-        const sc = document.createElement('div');
-        sc.id = 'viewerScrollContainer';
-        sc.className = 'viewer-scroll-container epub-mode';
-        content.appendChild(sc);
-        // Ensure image container is hidden
-        const ic = document.getElementById('viewerImageContainer');
-        if(ic) ic.style.display = 'none';
-        content.classList.add('scroll-mode');
-    } else {
-        container.style.display = 'block';
-        container.innerHTML = ''; // Clear previous
-        container.classList.add('epub-mode');
-    }
-    
-    const scrollContainer = document.getElementById('viewerScrollContainer');
-    
-    showToast("📘 리더 엔진을 초기화합니다...");
-    
-    try {
-        // Dynamic Import Foliate
-        const { View } = await import('./foliate/view.js');
-        
-        const view = new View(scrollContainer);
-        await view.open(blob);
-        
-        vState.foliateView = view;
-        console.log("✅ Foliate View Initialized");
-        
-        // Apply Initial Settings on Load
-        view.addEventListener('load', () => {
-             console.log("📘 Foliate Content Loaded - Applying Settings");
-             applyTextSettings();
-        });
-        
-    } catch (e) {
-        console.error("Foliate Init Failed:", e);
-        showToast("❌ 리더 초기화 실패: " + e.message);
-    }
 }
 
 /* Legacy EPUB Rendering (Simple HTML) */
