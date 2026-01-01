@@ -1,83 +1,87 @@
-# TokiSync v3.3.1 Installation Guide
+# TokiSync v3.3.2 설치 가이드
 
-This guide will help you perform a fresh installation of the TokiSync system (v3.3.1), which includes the **Google Apps Script (GAS) Server** and the **Client Script** (Tampermonkey).
+이 가이드는 TokiSync 시스템(v3.3.2)을 새로 설치하거나 재설정하는 방법을 안내합니다.
+시스템은 크게 **Google Apps Script (GAS) 서버**와 **클라이언트 스크립트** (Tampermonkey)로 구성됩니다.
 
-## Prerequisites
+## 사전 준비 (Prerequisites)
 
-1.  **Google Account**: Required for Google Drive and Google Apps Script.
-2.  **Google Drive Folder**: Create a dedicated folder in your Google Drive (e.g., named "TokiSync_Library").
-    - **Note the Folder ID**: This is the string of characters at the end of the URL when you open the folder (e.g., `1aBcDeFgHiJkLmNoPqRsTuVwXyZ`).
-
----
-
-## Step 1: Set up Google Apps Script (Server)
-
-The GAS Server handles file processing, uploading to Drive, and serving the Viewer content.
-
-1.  Go to [script.google.com](https://script.google.com/).
-2.  Click **"New Project"**.
-3.  Name the project (e.g., "TokiSync Server v3").
-4.  **Reference Code**:
-    - Open the attached artifact: `gas_server_code.js`.
-    - Copy **ALL** the code from that file.
-5.  **Paste Code**:
-    - In the GAS editor, open `Code.gs` (default file).
-    - Delete any existing code.
-    - Paste the copied code completely.
-6.  **Enable Advanced Services** (Critical):
-    - On the left sidebar, click **"Editor"** (< > icon) -> **"Services"** (+ icon).
-    - Select **Google Drive API**.
-    - Identifier: `Drive`.
-    - Click **Add**.
-7.  **Deploy**:
-    - Click top-right **"Deploy"** > **"New deployment"**.
-    - Click the gear icon (Settings) next to "Select type" > **"Web app"**.
-    - **Description**: "v3.3.1".
-    - **Execute as**: **Me** (your email).
-    - **Who has access**: **Anyone** (Anyone with Google Account may also work, but "Anyone" is recommended to avoid login loops in the iframe).
-    - Click **Deploy**.
-    - **Authorize**: You will be asked to authorize the script.
-      - Click "Review Permissions".
-      - Choose your account.
-      - You may see "App isn't verified" -> Click "Advanced" -> "Go to ... (unsafe)".
-      - Click "Allow".
-8.  **Copy URL**:
-    - Copy the **Web App URL** (ends with `/exec`). You will need this for the client setup.
+1.  **Google 계정**: Google Drive와 Apps Script를 사용하기 위해 필요합니다.
+2.  **구글 드라이브 폴더**:
+    - 만화를 저장할 **전용 폴더**를 하나 생성하세요 (예: `TokiSync_Library`).
+    - **폴더 ID 확인**: 생성한 폴더에 들어갔을 때 브라우저 주소창의 마지막 부분(`1aBc...` 와 같은 긴 문자열)이 폴더 ID입니다. 이를 따로 메모해 두세요.
 
 ---
 
-## Step 2: Set up Client (Tampermonkey)
+## 1단계: Google Apps Script (서버) 설정
 
-1.  Make sure [Tampermonkey](https://www.tampermonkey.net/) is installed in your browser.
-2.  **Install Script**:
-    - Use the `tokiSyncScript.js` file from your workspace.
-    - Or create a new script in Tampermonkey and copy-paste the content of `tokiSyncScript.js`.
-3.  **Configure**:
-    - Visit a supported site (e.g., Newtoki).
-    - The script should load. If it's the first run, it might ask for permission or setup.
-    - **Menu Setup**:
-      - Click the Tampermonkey icon > TokiSync.
-      - Select **"⚙️ 설정 (URL/FolderID)"**.
-      - **Folder ID**: Enter the Drive Folder ID from Prerequisites.
-      - **API URL**: Enter the Web App URL from Step 1.
-      - **Dashboard URL**: (Optional) Enter the GitHub Pages Viewer URL if you have one deployed (e.g., `https://yourname.github.io/tokiSync/`).
+GAS 서버는 만화 이미지/텍스트를 처리하고 구글 드라이브에 저장하며, 뷰어에 파일 목록을 제공하는 역할을 합니다.
+
+1.  [script.google.com](https://script.google.com/) 에 접속합니다.
+2.  **"새 프로젝트 (New Project)"** 버튼을 클릭합니다.
+3.  프로젝트 이름을 지정합니다 (예: `TokiSync Server v3`).
+4.  **코드 복사**:
+    - 이 프로젝트에 포함된 `google_app_script/TokiSync_Server_Bundle.gs` 파일의 내용을 엽니다.
+    - 모든 코드를 복사합니다.
+5.  **코드 붙여넣기**:
+    - GAS 에디터의 `Code.gs` 파일을 열고, 기존 내용을 모두 지웁니다.
+    - 복사한 코드를 붙여넣고 저장(Ctrl+S)합니다.
+6.  **고급 서비스(Services) 추가** (중요):
+    - 왼쪽 사이드바에서 **"서비스 (Services)"** 옆의 `+` 버튼을 클릭합니다.
+    - **Google Drive API**를 선택합니다.
+    - 식별자(Identifier)가 `Drive`로 되어있는지 확인하고 **추가(Add)**를 클릭합니다.
+7.  **배포 (Deploy)**:
+    - 오른쪽 상단 **"배포 (Deploy)"** -> **"새 배포 (New deployment)"**를 클릭합니다.
+    - "유형 선택" 옆의 톱니바퀴 아이콘 -> **"웹 앱 (Web app)"**을 선택합니다.
+    - **설명**: `v3.3.2` 등 자유롭게 입력.
+    - **다음 사용자로 실행 (Execute as)**: **`나 (Me)`** (본인 이메일).
+    - **엑세스 권한이 있는 사용자 (Who has access)**: **`모든 사용자 (Anyone)`**를 선택합니다.
+      - _참고: `모든 사용자`로 설정해야 뷰어(Web)에서 로그인 문제 없이 API를 호출할 수 있습니다._
+    - **배포 (Deploy)** 버튼을 클릭합니다.
+    - **권한 승인**: 스크립트 실행 권한을 요청하는 창이 뜹니다.
+      - "검토 (Review Permissions)" 클릭 -> 계정 선택 -> ("확인되지 않은 앱" 경고 시) "고급 (Advanced)" -> "이동 (Go to ... unsafe)" -> **"허용 (Allow)"**.
+8.  **URL 복사**:
+    - 생성된 **웹 앱 URL** (끝이 `/exec`로 끝남)을 복사하여 메모해 둡니다.
 
 ---
 
-## Step 3: Verify Installation
+## 2단계: 클라이언트 (Tampermonkey) 설정
 
-1.  **Sync Test**:
-    - Go to a comic list page on Newtoki.
-    - You should see status indicators (colored backgrounds) on list items once the script scans your Drive.
-    - Click a "Download" button (if available) or use "One-time download" menu.
-    - Monitor the **Status Box** (bottom right) for "Upload Complete".
-2.  **Viewer Test**:
-    - Open your Dashboard URL (Viewer).
-    - If connected correctly, it should display your library.
-    - Try opening a book to verify the new v3.3.1 Scroll Mode works (Double-tap at bottom, etc.).
+웹툰 사이트에서 동작할 유저 스크립트를 설치합니다.
 
-## Troubleshooting
+1.  브라우저에 [Tampermonkey](https://www.tampermonkey.net/) 확장 프로그램이 설치되어 있어야 합니다.
+2.  **스크립트 설치**:
+    - 프로젝트의 `tokiSyncScript.js` 파일 내용을 복사합니다.
+    - Tampermonkey 대시보드 -> `+` 탭 (새 스크립트 추가) -> 내용을 모두 지우고 붙여넣기 -> 저장.
+3.  **설정 (Config)**:
+    - 지원되는 사이트(예: 뉴토끼)에 접속합니다.
+    - 스크립트가 로드되면, Tampermonkey 아이콘을 클릭하고 **TokiSync** 메뉴를 확인합니다.
+    - **"⚙️ 설정 (URL/FolderID)"** 메뉴를 클릭합니다.
+    - **폴더 ID**: '사전 준비' 단계에서 메모한 구글 드라이브 폴더 ID를 입력합니다.
+    - **API URL**: '1단계'에서 복사한 GAS 웹 앱 URL을 입력합니다.
+    - **대시보드 URL**: (선택 사항) 뷰어 주소가 있다면 입력합니다 (예: `https://사용자ID.github.io/tokiSync/`).
 
-- **"ScriptError: Authorization is required"**: Re-deploy the GAS Web App and ensure you authorized it.
-- **"Network Error"**: Check if the Web App URL is correct in the Tampermonkey settings (must end in `/exec`).
-- **API Limit**: If uploads fail repeatedly, you may have hit Google's daily quota. Wait 24 hours.
+---
+
+## 3단계: 설치 확인
+
+1.  **동기화 테스트**:
+    - 뉴토끼/마나토끼 리스트 페이지에 접속합니다.
+    - 스크립트가 드라이브를 스캔하고, 이미 다운로드된 항목은 회색으로 표시되는지 확인합니다.
+    - "1회성 다운로드" 메뉴 등을 이용해 다운로드를 시도하고, 우측 하단 상태창에 "업로드 완료"가 뜨는지 확인합니다.
+2.  **뷰어 테스트**:
+    - 설정한 대시보드(뷰어) URL로 접속합니다.
+    - 라이브러리 목록이 정상적으로 로딩되는지 확인합니다.
+    - 책을 열어 스크롤/페이지 넘김 및 이미지가 정상적으로 나오는지 확인합니다.
+
+## 문제 해결 (Troubleshooting)
+
+- **"ScriptError: Authorization is required" (권한 오류)**:
+  - GAS 웹 앱 배포 시 권한 승인을 하지 않았거나, 배포가 꼬인 경우입니다. GAS 편집기에서 다시 "새 배포"를 진행하고 권한을 승인해 주세요.
+- **"Network Error" (네트워크 오류)**:
+  - Tampermonkey 설정에 입력한 API URL이 정확한지 확인하세요. (`/exec`로 끝나야 합니다.)
+- **업로드 실패 (Quota Exceeded)**:
+  - 구글 드라이브/스크립트의 일일 사용량(Quota)을 초과했을 수 있습니다. (일반 계정 기준 하루 약 50MB~100MB 업로드 제한이 있을 수 있음, 또는 API 호출 횟수 제한)
+
+---
+
+_TokiSync v3.3.2_
