@@ -1414,12 +1414,16 @@ function handleViewerClick(e) {
  * @param {number} [duration=2000] - 지속 시간 (ms)
  */
 function showToast(msg, duration = 2000) {
-    const toast = document.getElementById('toast');
-    toast.innerText = msg;
+    const toast = document.createElement('div');
     toast.className = 'toast show';
-    clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => {
-        toast.className = 'toast';
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+             if(toast.parentNode) toast.remove();
+        }, 300);
     }, duration);
 }
 
