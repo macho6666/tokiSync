@@ -822,3 +822,110 @@ foliate-view {
     height: 100%;
     display: block;
 }
+
+/* =========================================
+   New Text Viewer Layout (Integrated from test.html)
+   ========================================= */
+
+:root {
+    --view-width: 700px;
+    --view-height: 850px;
+}
+
+/* Viewer Main Frame */
+.book-container {
+    width: var(--view-width);
+    height: var(--view-height);
+    background-color: #fdfaf2; /* Paper color */
+    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    overflow: hidden;
+    position: relative;
+    border-radius: 8px;
+    margin: auto; /* Center in viewer-content */
+    display: none; /* Hidden by default, shown in Text Mode */
+}
+
+/* Multi-column Body */
+.text-columns {
+    width: 100%;
+    height: 100%;
+    column-width: var(--view-width);
+    column-gap: 0;
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+    /* Ensure fill */
+    column-fill: auto;
+    height: 100%;
+}
+
+.inner-content {
+    padding: 60px 50px; /* Adjusted padding */
+    line-height: 1.8;
+    font-size: 1.15rem;
+    color: #333;
+    text-align: justify;
+    box-sizing: border-box;
+    /* Font settings will be overridden by JS settings */
+}
+
+/* Floating Controls (Bottom Center) */
+.floating-controls {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 5px 15px;
+    border-radius: 30px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    backdrop-filter: blur(5px);
+    gap: 10px;
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+/* Show floating controls on hover or interaction state */
+.book-container:hover .floating-controls,
+.floating-controls.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.nav-btn.float {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #555;
+    padding: 0 5px;
+    transition: 0.2s;
+    line-height: 1;
+}
+
+.nav-btn.float:hover { color: #000; transform: scale(1.1); }
+.nav-btn.float:disabled { color: #ccc; cursor: default; transform: none; }
+
+.page-indicator-float {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #666;
+    min-width: 70px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Touch Zones */
+.side-tap {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 20%; /* Wider touch area */
+    cursor: pointer;
+    z-index: 5;
+    /* background: rgba(255,0,0,0.1); Debug */ 
+}
+.left-tap { left: 0; }
+.right-tap { right: 0; }

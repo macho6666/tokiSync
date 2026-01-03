@@ -79,4 +79,6 @@ class TokiApiClient {
 }
 
 // 전역 인스턴스
-const API = new TokiApiClient();
+window.API = new TokiApiClient();
+const API = window.API; // Export for local use if needed, though mostly used via window in other modules now
+
