@@ -15,11 +15,11 @@ window.TokiSyncCore = function (GM_context) {
     const JSZip = GM_context.JSZip;
     const PROTOCOL_VERSION = 3; // Major Version (Server Compatibility)
     const SCRIPT_NAME = "TokiSync Core";
-    const CLIENT_VERSION = "v1.1.2"; // Fix: Loop robustness
+    const CLIENT_VERSION = "v1.1.3"; // Imp: Version Check & Whitelist
     const LOG_PREFIX = `[${SCRIPT_NAME}]`;
 
     // [New] 호환성 체크: Core가 요구하는 최소 로더 버전 확인
-    const MIN_LOADER_VERSION = "v1.1.2";
+    const MIN_LOADER_VERSION = "v1.1.3";
     const currentLoaderVer = GM_context.loaderVersion || "1.0.0"; // 없을 경우 구버전 간주
 
     if (currentLoaderVer < MIN_LOADER_VERSION) {
@@ -65,7 +65,7 @@ window.TokiSyncCore = function (GM_context) {
 
             GM_setValue(CFG_CONFIG_VER, CURRENT_CONFIG_VER);
 
-            alert("TokiSync v3.0 업데이트: 설정을 초기화했습니다.\n새로운 서버 연결을 위해 설정을 다시 진행해주세요.");
+            alert(`TokiSync ${CLIENT_VERSION} 업데이트: 설정을 초기화했습니다.\n새로운 서버 연결을 위해 설정을 다시 진행해주세요.`);
             location.reload();
         }
     }

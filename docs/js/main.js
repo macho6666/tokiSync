@@ -14,7 +14,7 @@ const DEFAULT_DOMAINS = {
     booktoki: '469'
 };
 
-const VIEWER_VERSION = "v1.1.2"; // Critical Fix: Loop Crash
+const VIEWER_VERSION = "v1.1.3"; // Ver Check & Whitelist
 // [New] Expose Version to Global Scope for Debugging
 window.TOKI_VIEWER_VERSION = VIEWER_VERSION;
 

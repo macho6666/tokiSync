@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TokiSync (Link to Drive)
 // @namespace    http://tampermonkey.net/
-// @version      1.1.2
+// @version      1.1.3
 // @description  Toki series sites -> Google Drive syncing tool (Loader) (GitHub CDN)
 // @author       pray4skylark
 // @updateURL    https://github.com/pray4skylark/tokiSync/raw/main/tokiSyncScript.js
@@ -23,6 +23,10 @@
 // @grant        GM_deleteValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_registerMenuCommand
+// @connect      api.github.com
+// @connect      raw.githubusercontent.com
+// @connect      script.google.com
+// @connect      script.googleusercontent.com
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.js
 // @run-at       document-end
@@ -49,6 +53,7 @@
     const PINNED_VER_KEY = "TOKI_PINNED_VERSION";
     const CACHE_DURATION = 60 * 60 * 1000; // 1시간
     const CFG_DEBUG_KEY = "TOKI_DEBUG_MODE";
+    const FALLBACK_VERSION = "v1.1.2";
 
 
 
@@ -183,11 +188,11 @@
                                 GM_setValue(CACHE_KEY_VER, latestVer);
                                 GM_setValue(CACHE_KEY_TIME, now);
                                 resolve(latestVer);
-                            } else resolve(cachedVer || "v3.0.0-beta.251215.0002");
-                        } catch (e) { resolve(cachedVer || "v3.0.0-beta.251215.0002"); }
-                    } else resolve(cachedVer || "v3.0.0-beta.251215.0002");
+                            } else resolve(cachedVer || FALLBACK_VERSION);
+                        } catch (e) { resolve(cachedVer || FALLBACK_VERSION); }
+                    } else resolve(cachedVer || FALLBACK_VERSION);
                 },
-                onerror: () => resolve(cachedVer || "v3.0.0-beta.251215.0002")
+                onerror: () => resolve(cachedVer || FALLBACK_VERSION)
             });
         });
     }
