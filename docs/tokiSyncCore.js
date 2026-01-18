@@ -4,18 +4,58 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 126
+(__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
+
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   Y: () => (/* binding */ getSeriesInfo)
+/* harmony export */ });
+function getSeriesInfo(workId, detectedCategory) {
+    const metaSubject = document.querySelector('meta[name="subject"]');
+    const pageDesc = document.querySelector('.page-desc');
+    const metaTitle = document.querySelector('meta[property="og:title"]');
+
+    let fullTitle = "Unknown";
+    if (metaSubject) fullTitle = metaSubject.content.trim();
+    else if (pageDesc) fullTitle = pageDesc.innerText.trim();
+    else if (metaTitle) fullTitle = metaTitle.content.split('>')[0].split('|')[0].trim();
+
+    let cleanTitle = fullTitle.replace(/[\\/:*?"<>|]/g, "");
+    if (cleanTitle.length > 15) cleanTitle = cleanTitle.substring(0, 15).trim();
+
+    const details = getDetailInfo();
+    return { fullTitle, cleanTitle, id: workId, ...details, category: detectedCategory };
+}
+
+function getDetailInfo() {
+    let author = "", category = "", status = "", thumbnail = "";
+    try {
+        const ogImage = document.querySelector('meta[property="og:image"]');
+        if (ogImage) thumbnail = ogImage.content;
+
+        const textNodes = document.body.innerText.split('\n');
+        textNodes.forEach(line => {
+            if (line.includes("작가 :")) author = line.replace("작가 :", "").trim();
+            if (line.includes("분류 :")) category = line.replace("분류 :", "").trim();
+            if (line.includes("발행구분 :")) status = line.replace("발행구분 :", "").trim();
+        });
+    } catch (e) { }
+    return { author, category, status, thumbnail };
+}
+
+
+/***/ },
+
 /***/ 302
 (__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   C$: () => (/* binding */ initQueue),
-/* harmony export */   IS: () => (/* binding */ getQueue),
 /* harmony export */   Rt: () => (/* binding */ completeTask),
-/* harmony export */   UT: () => (/* binding */ enqueueTask),
+/* harmony export */   enqueueTask: () => (/* binding */ enqueueTask),
 /* harmony export */   wv: () => (/* binding */ getMyStats),
 /* harmony export */   zq: () => (/* binding */ claimNextTask)
 /* harmony export */ });
-/* unused harmony exports setQueue, releaseTask */
+/* unused harmony exports initQueue, getQueue, setQueue, releaseTask */
 /* harmony import */ var _logger_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(569);
 
 
@@ -39,8 +79,18 @@ function setQueue(q) {
 function enqueueTask(task) {
     // task: { id, title, url, site }
     const q = getQueue();
-    if (q.find(t => t.id === task.id)) {
-        (0,_logger_js__WEBPACK_IMPORTED_MODULE_0__/* .log */ .Rm)(`Duplicate task ignored: ${task.title}`);
+    const existing = q.find(t => t.id === task.id);
+    if (existing) {
+        // If task is stuck in 'working' or failed, allow retry
+        if (existing.status !== 'pending') {
+            (0,_logger_js__WEBPACK_IMPORTED_MODULE_0__/* .log */ .Rm)(`🔄 Re-queueing stuck/completed task: ${task.title}`);
+            existing.status = 'pending';
+            existing.workerId = null;
+            existing.updatedAt = Date.now();
+            setQueue(q);
+            return true;
+        }
+        (0,_logger_js__WEBPACK_IMPORTED_MODULE_0__/* .log */ .Rm)(`Duplicate task ignored (Already Pending): ${task.title}`);
         return false;
     }
     const queueItem = {
@@ -126,9 +176,11 @@ function getMyStats(workerId) {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   Gd: () => (/* binding */ saveInfoJson),
-/* harmony export */   t9: () => (/* binding */ initNetwork)
+/* harmony export */   al: () => (/* binding */ fetchHistoryFromCloud),
+/* harmony export */   t9: () => (/* binding */ initNetwork),
+/* harmony export */   y4: () => (/* binding */ uploadResumable)
 /* harmony export */ });
-/* unused harmony exports fetchHistoryFromCloud, arrayBufferToBase64, uploadResumable */
+/* unused harmony export arrayBufferToBase64 */
 /* harmony import */ var _config_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(899);
 
 
@@ -152,22 +204,20 @@ function checkAuthRequired(responseText) {
     return false;
 }
 
-function fetchHistoryFromCloud(seriesInfo) {
+    function fetchHistoryFromCloud(seriesInfo) {
     return new Promise((resolve, reject) => {
-        const config = getConfig();
+        const config = (0,_config_js__WEBPACK_IMPORTED_MODULE_0__/* .getConfig */ .zj)();
         if (!config.url || !config.folderId) { resolve([]); return; }
         
         const payload = { 
             folderId: config.folderId, 
             type: 'check_history', 
             protocolVersion: 3, 
-            clientVersion: CLIENT_VERSION, 
+            clientVersion: _config_js__WEBPACK_IMPORTED_MODULE_0__/* .CLIENT_VERSION */ .fZ, 
             category: seriesInfo.category,
             folderName: `[${seriesInfo.id}] ${seriesInfo.cleanTitle}` 
         };
         
-        // updateStatus called in caller (UI concern)
-
         GM.xmlhttpRequest({
             method: "POST", url: config.url, data: JSON.stringify(payload), headers: { "Content-Type": "text/plain" },
             onload: (res) => {
@@ -175,9 +225,25 @@ function fetchHistoryFromCloud(seriesInfo) {
                     if (checkAuthRequired(res.responseText)) { resolve([]); return; }
                     try {
                         const json = JSON.parse(res.responseText);
-                        const cloudHistory = Array.isArray(json.body) ? json.body : [];
+                        let cloudHistory = Array.isArray(json.body) ? json.body : [];
+                        
+                        // Filter System Files
+                        const ignoreList = ['cover.jpg', 'info.json', 'checklist.json', 'temp', '.DS_Store'];
+                        const originalCount = cloudHistory.length;
+                        
+                        cloudHistory = cloudHistory.filter(item => {
+                            const name = (typeof item === 'string') ? item : (item.name || "");
+                            return !ignoreList.some(ignore => name.toLowerCase().includes(ignore));
+                        });
+
+                        if (originalCount !== cloudHistory.length) {
+                             console.log(`[TokiSync] History Filtered: ${originalCount} -> ${cloudHistory.length} (Removed system files)`);
+                        }
+                        // Debug Log
+                        console.log(`[TokiSync] Cloud Files:`, cloudHistory);
+
                         resolve(cloudHistory);
-                    } catch (e) { resolve([]); }
+                    } catch (e) { console.error(e); resolve([]); }
                 } else resolve([]);
             },
             onerror: () => resolve([])
@@ -320,69 +386,52 @@ async function uploadResumable(blob, folderName, fileName, category, onProgress)
 
 /***/ },
 
-/***/ 458
+/***/ 414
 (__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
 
-
-// EXPORTS
-__webpack_require__.d(__webpack_exports__, {
-  aM: () => (/* binding */ initDownloader),
-  qc: () => (/* binding */ tokiDownload),
-  M$: () => (/* binding */ tokiDownloadSingle)
-});
-
-// UNUSED EXPORTS: createEpub
-
-// EXTERNAL MODULE: ./src/core/network.js
-var network = __webpack_require__(391);
-// EXTERNAL MODULE: ./src/core/logger.js
-var logger = __webpack_require__(569);
-;// ./src/core/parser.js
-function getSeriesInfo(workId, detectedCategory) {
-    const metaSubject = document.querySelector('meta[name="subject"]');
-    const pageDesc = document.querySelector('.page-desc');
-    const metaTitle = document.querySelector('meta[property="og:title"]');
-
-    let fullTitle = "Unknown";
-    if (metaSubject) fullTitle = metaSubject.content.trim();
-    else if (pageDesc) fullTitle = pageDesc.innerText.trim();
-    else if (metaTitle) fullTitle = metaTitle.content.split('>')[0].split('|')[0].trim();
-
-    let cleanTitle = fullTitle.replace(/[\\/:*?"<>|]/g, "");
-    if (cleanTitle.length > 15) cleanTitle = cleanTitle.substring(0, 15).trim();
-
-    const details = getDetailInfo();
-    return { fullTitle, cleanTitle, id: workId, ...details, category: detectedCategory };
-}
-
-function getDetailInfo() {
-    let author = "", category = "", status = "", thumbnail = "";
-    try {
-        const ogImage = document.querySelector('meta[property="og:image"]');
-        if (ogImage) thumbnail = ogImage.content;
-
-        const textNodes = document.body.innerText.split('\n');
-        textNodes.forEach(line => {
-            if (line.includes("작가 :")) author = line.replace("작가 :", "").trim();
-            if (line.includes("분류 :")) category = line.replace("분류 :", "").trim();
-            if (line.includes("발행구분 :")) status = line.replace("발행구분 :", "").trim();
-        });
-    } catch (e) { }
-    return { author, category, status, thumbnail };
-}
-
-// EXTERNAL MODULE: ./src/core/config.js
-var core_config = __webpack_require__(899);
-;// ./src/core/downloader.js
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   aM: () => (/* binding */ initDownloader),
+/* harmony export */   qc: () => (/* binding */ tokiDownload),
+/* harmony export */   tokiDownloadSingle: () => (/* binding */ tokiDownloadSingle)
+/* harmony export */ });
+/* unused harmony export createEpub */
+/* harmony import */ var _network_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(391);
+/* harmony import */ var _logger_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(569);
+/* harmony import */ var _parser_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(126);
+/* harmony import */ var _config_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(899);
 
 
 
 
 
+let GM = null; 
 let JSZip = null;
 
 function initDownloader(gmContext) {
+    GM = gmContext;
     JSZip = gmContext.JSZip;
+}
+
+// Helper: Fetch Blob (using GM)
+function fetchBlob(url, listener) {
+    return new Promise((resolve) => {
+        GM.xmlhttpRequest({
+            method: "GET",
+            url: url,
+            responseType: "arraybuffer", // Use arraybuffer for robustness
+            timeout: 20000,
+            headers: { "Referer": document.URL },
+            onload: (res) => {
+                if (res.status === 200) resolve(res.response);
+                else resolve(null);
+            },
+            onprogress: (e) => {
+                 // Optional: listener(e.loaded, e.total);
+            },
+            onerror: () => resolve(null),
+            ontimeout: () => resolve(null)
+        });
+    });
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -410,11 +459,11 @@ async function createEpub(zip, title, author, textContent) {
 
 async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
     const { site, workId, detectedCategory } = siteInfo;
-    const config = (0,core_config/* getConfig */.zj)();
+    const config = (0,_config_js__WEBPACK_IMPORTED_MODULE_3__/* .getConfig */ .zj)();
 
     const pauseForCaptcha = (iframe) => {
         return new Promise(resolve => {
-            (0,logger/* updateStatus */.yB)("<strong>🤖 캡차/차단 감지!</strong><br>해결 후 버튼 클릭");
+            (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)("<strong>🤖 캡차/차단 감지!</strong><br>해결 후 버튼 클릭");
             iframe.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:80vw; height:80vh; background:white; z-index:99998;";
             const btn = document.getElementById('tokiResumeButton');
             btn.style.display = 'block';
@@ -435,10 +484,10 @@ async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
         }
         if (list.length === 0) return;
 
-        const info = getSeriesInfo(workId, detectedCategory);
+        const info = (0,_parser_js__WEBPACK_IMPORTED_MODULE_2__/* .getSeriesInfo */ .Y)(workId, detectedCategory);
         const targetFolderName = `[${info.id}] ${info.cleanTitle}`;
 
-        await (0,network/* saveInfoJson */.Gd)(info, 0, 0, true); 
+        await (0,_network_js__WEBPACK_IMPORTED_MODULE_0__/* .saveInfoJson */ .Gd)(info, 0, 0, true); 
 
         const iframe = document.createElement('iframe');
         iframe.id = 'tokiDownloaderIframe';
@@ -461,8 +510,8 @@ async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
                 epCleanTitle = epCleanTitle.replace(/[\\/:*?"<>|]/g, '');
                 let zipFileName = `${numText.padStart(4, '0')} - ${epCleanTitle}.cbz`;
 
-                (0,logger/* setListItemStatus */.OF)(currentLi, "⏳ 로딩 중...", "#fff9c4", "#d32f2f");
-                (0,logger/* updateStatus */.yB)(`[${targetFolderName}]<br><strong>${epCleanTitle}</strong> (${i + 1}/${list.length}) 로딩...<br>현재 업로드 중: ${activeUploads.size}개`);
+                (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .setListItemStatus */ .OF)(currentLi, "⏳ 로딩 중...", "#fff9c4", "#d32f2f");
+                (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`[${targetFolderName}]<br><strong>${epCleanTitle}</strong> (${i + 1}/${list.length}) 로딩...<br>현재 업로드 중: ${activeUploads.size}개`);
 
                 await waitIframeLoad(src);
                 
@@ -501,7 +550,7 @@ async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
                          if (imgLists.length === 0) throw new Error("이미지 0개 발견 (Skip)");
                     }
 
-                    (0,logger/* setListItemStatus */.OF)(currentLi, `🖼️ 이미지 0/${imgLists.length}`, "#fff9c4", "#d32f2f");
+                    (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .setListItemStatus */ .OF)(currentLi, `🖼️ 이미지 0/${imgLists.length}`, "#fff9c4", "#d32f2f");
                     
                     // Simple Image Fetcher (Re-implemented via GM_xmlhttpRequest)
                     const fetchAndAddToZip = (imgSrc, j, ext) => new Promise((resolve) => {
@@ -520,12 +569,12 @@ async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
 
                 // Placeholder for ZIP upload logic...
                 // await uploadResumable(await zip.generateAsync({type:"blob"}), targetFolderName, zipFileName, info.category);
-                 (0,logger/* setListItemStatus */.OF)(currentLi, "✅ 완료 (가상)", "#c8e6c9", "green");
+                 (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .setListItemStatus */ .OF)(currentLi, "✅ 완료 (가상)", "#c8e6c9", "green");
 
             } catch (epError) {
                 console.error(epError);
-                (0,logger/* setListItemStatus */.OF)(currentLi, `❌ 실패: ${epError.message}`, "#ffcdd2", "red");
-                (0,logger/* updateStatus */.yB)(`⚠️ 오류: ${epError.message}`);
+                (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .setListItemStatus */ .OF)(currentLi, `❌ 실패: ${epError.message}`, "#ffcdd2", "red");
+                (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`⚠️ 오류: ${epError.message}`);
             }
         }
 
@@ -536,14 +585,25 @@ async function tokiDownload(startIndex, lastIndex, targetNumbers, siteInfo) {
 }
 
 async function tokiDownloadSingle(task) {
-    const { url, title, id, category } = task;
-    const info = { id, cleanTitle: title, category: category || "Webtoon" };
-    // TODO: Need site detection from URL if not provided
-    const site = "뉴토끼"; // Placeholder, logic needed to detect site from URL
+    const { url, title, id, category, folderName } = task; // folderName passed from queue
+    const config = (0,_config_js__WEBPACK_IMPORTED_MODULE_3__/* .getConfig */ .zj)();
     
-    (0,logger/* updateStatus */.yB)(`🚀 작업 시작: ${title}`);
+    // [Refactor] Derive site info locally or passed in task
+    // We assume 'id' is like "site_workId_epNum" or similar, or just "workId"?
+    // Actually, in the new Worker architecture, 'task' structure is critical.
+    // For now, let's keep it compatible with what `ui.js` sends.
     
-    // Create Iframe
+    // TODO: Better Site Detection
+    let site = '뉴토끼';
+    if(url.includes('booktoki')) site = '북토끼';
+    if(url.includes('manatoki')) site = '마나토끼';
+    
+    const info = { id, cleanTitle: title, category: category || (site === '북토끼' ? 'Novel' : 'Webtoon') };
+    const targetFolderName = folderName || `[${id}] ${title}`;
+
+    (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`🚀 작업 시작: ${title}`);
+
+    // Create or Reuse Iframe (Hidden)
     let iframe = document.getElementById('tokiDownloaderIframe');
     if (!iframe) {
         iframe = document.createElement('iframe');
@@ -552,40 +612,132 @@ async function tokiDownloadSingle(task) {
         document.querySelector('.content').prepend(iframe);
     }
 
-    const waitIframeLoad = (u) => new Promise(r => { 
-        iframe.src = u; 
-        iframe.onload = () => r(); 
-        // Timeout handling?
-    });
+    const waitIframeLoad = (u) => new Promise(r => { iframe.src = u; iframe.onload = () => r(); });
+    const pauseForCaptcha = (iframe) => {
+        return new Promise(resolve => {
+            (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)("<strong>🤖 캡차/차단 감지!</strong><br>해결 후 버튼 클릭");
+            iframe.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:80vw; height:80vh; background:white; z-index:99998;";
+            const btn = document.getElementById('tokiResumeButton');
+            if (btn) {
+                btn.style.display = 'block';
+                btn.onclick = () => {
+                    iframe.style.cssText = "position:absolute; top:-9999px; left:-9999px; width:600px; height:600px;";
+                    btn.style.display = 'none';
+                    resolve();
+                };
+            } else resolve();
+        });
+    };
 
     try {
         await waitIframeLoad(url);
-        await sleep(getDynamicWait(3000));
+        
+        // Dynamic Wait based on Category
+        const delayBase = (site === "북토끼" || category === "Novel") ? WAIT_NOVEL_MS : WAIT_WEBTOON_MS;
+        await sleep(getDynamicWait(delayBase));
 
         let iframeDocument = iframe.contentWindow.document;
 
-        // Captcha Check (Reusing logic)
-        const checkCaptcha = async () => {
+        // Captcha / Cloudflare / Error Checks
+        const checkObstacles = async () => {
              const isCaptcha = iframeDocument.querySelector('iframe[src*="hcaptcha"]') || iframeDocument.querySelector('.g-recaptcha') || iframeDocument.querySelector('#kcaptcha_image');
              const isCloudflare = iframeDocument.title.includes('Just a moment') || iframeDocument.getElementById('cf-challenge-running');
-             if (isCaptcha || isCloudflare) {
+             const noContent = (site === "북토끼") ? !iframeDocument.querySelector('#novel_content') : false;
+             const pageTitle = iframeDocument.title.toLowerCase();
+             const bodyText = iframeDocument.body ? iframeDocument.body.innerText.toLowerCase() : "";
+             const isError = pageTitle.includes("403") || pageTitle.includes("forbidden") || bodyText.includes("access denied");
+
+             if (isCaptcha || isCloudflare || noContent || isError) {
                  await pauseForCaptcha(iframe);
                  await sleep(3000);
-                 iframeDocument = iframe.contentWindow.document;
-                 return true;
+                 iframeDocument = iframe.contentWindow.document; // Refresh ref
+                 return true; // Retried
              }
              return false;
         };
-        await checkCaptcha();
+        await checkObstacles();
 
-        // Parse Logic (Simulated for now, need real selectors)
-        // ... (Real logic needs to be moved here)
+        // [Logic] Novel vs Images
+        const zip = new JSZip();
+        let zipFileName = `${(task.wrNum || "0000").toString().padStart(4,'0')} - ${title.replace(/[\\/:*?"<>|]/g, '')}`;
+        let finalFileName = "";
+
+        if (site === '북토끼' || category === 'Novel') {
+            const contentEl = iframeDocument.querySelector('#novel_content');
+            if (!contentEl) throw new Error("Novel Content Not Found");
+            const textContent = contentEl.innerText;
+            
+            await createEpub(zip, title, "Unknown", textContent);
+            finalFileName = `${zipFileName}.epub`;
+
+        } else {
+            // Image Logic
+            let imgLists = Array.from(iframeDocument.querySelectorAll('.view-padding div img'));
+            // Visibility Filter
+            for (let j = 0; j < imgLists.length;) { 
+                if (imgLists[j].checkVisibility() === false) imgLists.splice(j, 1); 
+                else j++; 
+            }
+
+            if (imgLists.length === 0) {
+                 // Retry once
+                 await sleep(2000);
+                 imgLists = Array.from(iframeDocument.querySelectorAll('.view-padding div img'));
+                 // Re-filter
+                 for (let j = 0; j < imgLists.length;) { 
+                    if (imgLists[j].checkVisibility() === false) imgLists.splice(j, 1); 
+                    else j++; 
+                }
+                 if (imgLists.length === 0) throw new Error("이미지 0개 발견 (Skip)");
+            }
+
+            (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`[${targetFolderName}]<br><strong>${title}</strong><br>이미지 ${imgLists.length}장 수집 중...`);
+
+            // Download Images
+            let downloaded = 0;
+            const promises = imgLists.map(async (img, idx) => {
+                const src = img.getAttribute('data-original') || img.src;
+                if (!src) return;
+
+                // Retry Logic (3 times)
+                let blob = null;
+                for(let r=0; r<3; r++) {
+                    blob = await fetchBlob(src); // Uses GM_xmlhttpRequest
+                    if(blob) break;
+                    await sleep(1000);
+                }
+
+                if (blob) {
+                    const ext = src.match(/\.(jpg|jpeg|png|webp|gif)/i)?.[1] || 'jpg';
+                    zip.file(`${String(idx+1).padStart(3, '0')}.${ext}`, blob);
+                    downloaded++;
+                } else {
+                    console.warn(`[Image Fail] ${src}`);
+                    // We don't throw here to allow partial success, or maybe we should?
+                }
+            });
+
+            await Promise.all(promises);
+            if (downloaded === 0) throw new Error("All images failed to download");
+            
+            finalFileName = `${zipFileName}.cbz`;
+        }
+
+        // Upload Logic
+        (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`📦 압축 & 업로드 준비...`);
+        const zipBlob = await zip.generateAsync({type:"blob"});
         
-        // Success
+        await (0,_network_js__WEBPACK_IMPORTED_MODULE_0__/* .uploadResumable */ .y4)(zipBlob, targetFolderName, finalFileName, category, (pct) => {
+             (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .updateStatus */ .yB)(`☁️ 업로드: ${pct}%`);
+        });
+
+        // Cleanup
+        iframe.remove();
         return true;
 
     } catch (e) {
-        console.error("Task Failed", e);
+        console.error(`[Download Error] ${title}:`, e);
+        if(iframe) iframe.remove();
         throw e;
     }
 }
@@ -593,7 +745,7 @@ async function tokiDownloadSingle(task) {
 // Helper: Pause for Captcha
 const pauseForCaptcha = (iframe) => {
     return new Promise(resolve => {
-        (0,logger/* updateStatus */.yB)("<strong>🤖 캡차/차단 감지!</strong><br>해결 후 버튼 클릭");
+        updateStatus("<strong>🤖 캡차/차단 감지!</strong><br>해결 후 버튼 클릭");
         iframe.style.cssText = "position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:80vw; height:80vh; background:white; z-index:99998;";
         const btn = document.getElementById('tokiResumeButton');
         if(btn) {
@@ -663,8 +815,9 @@ function setListItemStatus(li, message, bgColor = '#fff9c4', textColor = '#d32f2
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   startWorker: () => (/* binding */ startWorker)
 /* harmony export */ });
+/* unused harmony exports initWorker, isWorkerAlive */
 /* harmony import */ var _queue_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(302);
-/* harmony import */ var _downloader_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(458);
+/* harmony import */ var _downloader_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(414);
 /* harmony import */ var _logger_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(569);
 /* harmony import */ var _ui_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(963);
 
@@ -672,34 +825,53 @@ function setListItemStatus(li, message, bgColor = '#fff9c4', textColor = '#d32f2
 
 
 
+let GM = null;
 let isWorkerRunning = false;
 const WORKER_ID = `worker_${Date.now()}`;
 
-async function startWorker() {
+// Heartbeat Logic
+const HEARTBEAT_KEY = "TOKI_WORKER_HEARTBEAT";
+
+function initWorker(gmContext) {
+    GM = gmContext;
+}
+
+function updateHeartbeat() {
+    if(GM) GM.setValue(HEARTBEAT_KEY, Date.now());
+}
+
+async function isWorkerAlive() {
+    if(!GM) return false;
+    const lastBeat = await GM.getValue(HEARTBEAT_KEY, 0);
+    return (Date.now() - lastBeat) < 5000; // Alive if beat within 5 sec
+}
+
+async function startWorker(isDedicated = false) {
     if (isWorkerRunning) return;
     isWorkerRunning = true;
 
-    (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .log */ .Rm)(`👷 Worker Started (ID: ${WORKER_ID})`);
-    (0,_ui_js__WEBPACK_IMPORTED_MODULE_3__/* .injectDashboard */ .cj)(); // Disguise immediately
+    (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .log */ .Rm)(`👷 Worker Started (ID: ${WORKER_ID}, Dedicated: ${isDedicated})`);
+    if (isDedicated) (0,_ui_js__WEBPACK_IMPORTED_MODULE_3__/* .injectDashboard */ .cj)(); // Disguise only if dedicated worker window
 
     while (true) {
         try {
+            updateHeartbeat();
             updateDashboardStats(); // Update UI
             
             const task = (0,_queue_js__WEBPACK_IMPORTED_MODULE_0__/* .claimNextTask */ .zq)(WORKER_ID);
             if (task) {
                 (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .updateStatus */ .yB)(`🔨 작업 중: ${task.title}`);
                 (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .log */ .Rm)(`Processing task: ${task.title}`);
-                await (0,_downloader_js__WEBPACK_IMPORTED_MODULE_1__/* .tokiDownloadSingle */ .M$)(task);
+                await (0,_downloader_js__WEBPACK_IMPORTED_MODULE_1__.tokiDownloadSingle)(task);
                 (0,_queue_js__WEBPACK_IMPORTED_MODULE_0__/* .completeTask */ .Rt)(task.id);
                 (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .updateStatus */ .yB)(`✅ 완료: ${task.title}`);
             } else {
                 (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .updateStatus */ .yB)("💤 대기 중... (큐 비어있음)");
-                await sleep(3000);
+                await sleep(2000); // Faster polling for responsiveness
             }
         } catch (e) {
-            (0,_logger_js__WEBPACK_IMPORTED_MODULE_2__/* .log */ .Rm)(`Worker Loop Error: ${e.message}`, 'error');
-            await sleep(5000);
+             // ...
+             await sleep(5000);
         }
     }
 }
@@ -721,6 +893,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   C5: () => (/* binding */ CFG_DASH_KEY),
 /* harmony export */   CY: () => (/* binding */ migrateConfig),
+/* harmony export */   Up: () => (/* binding */ toggleDebug),
 /* harmony export */   V$: () => (/* binding */ CFG_URL_KEY),
 /* harmony export */   fZ: () => (/* binding */ CLIENT_VERSION),
 /* harmony export */   mt: () => (/* binding */ CFG_FOLDER_ID),
@@ -729,7 +902,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 /* harmony export */   sX: () => (/* binding */ MIN_LOADER_VERSION),
 /* harmony export */   zj: () => (/* binding */ getConfig)
 /* harmony export */ });
-/* unused harmony exports SCRIPT_NAME, PROTOCOL_VERSION, CFG_DEBUG_KEY, CFG_AUTO_SYNC_KEY, CFG_CONFIG_VER, toggleDebug */
+/* unused harmony exports SCRIPT_NAME, PROTOCOL_VERSION, CFG_DEBUG_KEY, CFG_AUTO_SYNC_KEY, CFG_CONFIG_VER */
 const SCRIPT_NAME = "TokiSync Core";
 const CLIENT_VERSION = "v1.1.3"; // Imp: Version Check & Whitelist
 const MIN_LOADER_VERSION = "v1.1.3";
@@ -794,6 +967,7 @@ function toggleDebug() {
 (__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   Dr: () => (/* binding */ injectDownloadButtons),
 /* harmony export */   Nb: () => (/* binding */ openDashboard),
 /* harmony export */   Ow: () => (/* binding */ openSettings),
 /* harmony export */   Vt: () => (/* binding */ initStatusUI),
@@ -801,6 +975,9 @@ function toggleDebug() {
 /* harmony export */   xY: () => (/* binding */ initUI)
 /* harmony export */ });
 /* harmony import */ var _config_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(899);
+/* harmony import */ var _logger_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(569);
+/* harmony import */ var _network_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(391);
+
 
 
 
@@ -911,6 +1088,140 @@ function injectDashboard() {
 }
 
 
+
+
+
+function injectDownloadButtons(siteInfo) {
+    const listItems = document.querySelectorAll('.list-body > li, .list-item'); 
+    
+    if (listItems.length === 0) {
+        (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .log */ .Rm)(`[UI] No list items found. Selectors: .list-body > li, .list-item`);
+        updateStatus("⚠️ 목록을 찾을 수 없습니다 (뷰어 페이지일 수 있음)");
+        return;
+    }
+
+    updateStatus(`⏳ 히스토리 확인 중... (${listItems.length}개 항목)`);
+
+    // Fetch History
+    (0,_network_js__WEBPACK_IMPORTED_MODULE_2__/* .fetchHistoryFromCloud */ .al)(siteInfo).then(history => {
+        (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .log */ .Rm)(`[UI] Cloud History Loaded: ${history.length} items`);
+        
+        let downloadedCount = 0;
+        
+        listItems.forEach((li, index) => {
+            const link = li.querySelector('a');
+            if (!link) return;
+            
+            // Clean Title Extraction (remove date/count spans)
+            // Clone node to safely manipulate
+            const linkClone = link.cloneNode(true);
+            Array.from(linkClone.children).forEach(child => child.remove());
+            const title = linkClone.innerText.trim();
+            
+            // Simple fuzzy check: checks if title is in history list (assuming history contains titles or partials)
+            // history returns array of { title: "..." } usually or just strings depending on GAS.
+            // Looking at network.js, it returns `json.body`. Assuming body is array of Objects or Strings.
+            // Let's assume Objects with `title` property or `name`.
+            // But usually history cloud returns list of folder names or similar.
+            // Let's assume strict title match or includes.
+            
+            // Strategy: Match based on Board Number (wr-num)
+            // Downloader saves as: "0123 - Title.cbz" (padded to 4 digits usually)
+            
+            const numEl = li.querySelector('.wr-num');
+            const numText = numEl ? numEl.innerText.trim() : null;
+            let isDownloaded = false;
+            let matchedName = "";
+
+            if (numText && /^\d+$/.test(numText)) {
+                // Pad to match commonly saved format, but also check raw number
+                const num = parseInt(numText); 
+                // Possible prefixes in Drive: "123 -", "0123 -", "123.cbz"
+                
+                isDownloaded = history.some(h => {
+                    const hName = String((typeof h === 'object' && h.name) ? h.name : h).trim();
+                    // Check if file starts with the number
+                    // e.g. hName="0123 - Title.cbz", numText="123"
+                    
+                    // Simple regex: Starts with number followed by non-digit or end
+                    // But we must handle padding. "0123" vs "123"
+                    const hMatch = hName.match(/^(\d+)/);
+                    if (hMatch) {
+                        const hNum = parseInt(hMatch[1]);
+                        return hNum === num;
+                    }
+                    return false;
+                });
+                if (isDownloaded) matchedName = `No.${num}`;
+            } else {
+                // Fallback: Title matching if no number column (e.g. mobile view sometimes hides it, or different layout)
+                // But user requested specific column usage.
+                const cleanTitle = title.replace(/\s/g, '');
+                isDownloaded = history.some(h => {
+                    const hName = String((typeof h === 'object' && h.name) ? h.name : h).trim();
+                    const cleanH = hName.replace(/\s/g, '');
+                    return cleanTitle.includes(cleanH) || cleanH.includes(cleanTitle);
+                });
+            }
+
+            if (li.querySelector('.toki-down-btn')) return;
+
+            const btn = document.createElement('button');
+            btn.className = 'toki-down-btn';
+            
+            if (isDownloaded) {
+                btn.innerText = '✅';
+                btn.style.cssText = "margin-left: 10px; padding: 2px 8px; cursor: default; border: 1px solid #4CAF50; background: #E8F5E9; color: #2E7D32;";
+                btn.title = `이미 다운로드됨 (${matchedName || numText || "Found"})`;
+                downloadedCount++;
+            } else {
+                btn.innerText = '⬇️';
+                btn.style.cssText = "margin-left: 10px; padding: 2px 8px; cursor: pointer; border: 1px solid #ccc; background: #fff;";
+                btn.innerText = '⬇️';
+                btn.style.cssText = "margin-left: 10px; padding: 2px 8px; cursor: pointer; border: 1px solid #ccc; background: #fff;";
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if(confirm(`[${title}] 다운로드 대기열에 추가하시겠습니까?`)) {
+                        Promise.resolve(/* import() */).then(__webpack_require__.bind(__webpack_require__, 302)).then(q => {
+                            // Prepare Metadata
+                            const info = siteInfo; 
+                            const folderName = `[${info.workId}] ${info.cleanTitle}`;
+                            
+                            q.enqueueTask({
+                                id: siteInfo.site + "_" + siteInfo.workId + "_" + numText, 
+                                title: title,
+                                url: link.href,
+                                site: siteInfo.site,
+                                category: siteInfo.detectedCategory,
+                                folderName: folderName, 
+                                seriesTitle: info.cleanTitle,
+                                wrNum: numText 
+                            });
+                             const btnEl = e.target;
+                             btnEl.innerText = "⏳";
+                             btnEl.disabled = true;
+
+                        });
+                    }
+                };
+            }
+
+            const targetContainer = li.querySelector('.wr-subject') || li;
+            targetContainer.appendChild(btn);
+        });
+
+        updateStatus(`✅ 준비 완료: ${siteInfo.site} (총 ${listItems.length}개, 다운로드됨 ${downloadedCount}개)`);
+    });
+}
+
+function updateStatus(msg) {
+    const el = document.getElementById('tokiStatusText');
+    if (el) el.innerText = msg;
+    (0,_logger_js__WEBPACK_IMPORTED_MODULE_1__/* .log */ .Rm)(msg);
+}
+
+
 /***/ }
 
 /******/ 	});
@@ -965,8 +1276,9 @@ var __webpack_exports__ = {};
 /* harmony import */ var _config_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(899);
 /* harmony import */ var _network_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(391);
 /* harmony import */ var _ui_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(963);
-/* harmony import */ var _downloader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(458);
-/* harmony import */ var _queue_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(302);
+/* harmony import */ var _parser_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(126);
+/* harmony import */ var _downloader_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(414);
+
 
 
 
@@ -994,30 +1306,34 @@ function main(GM_context) {
     (0,_config_js__WEBPACK_IMPORTED_MODULE_0__/* .initConfig */ .pw)(GM);
     (0,_network_js__WEBPACK_IMPORTED_MODULE_1__/* .initNetwork */ .t9)(GM);
     (0,_ui_js__WEBPACK_IMPORTED_MODULE_2__/* .initUI */ .xY)(GM);
-    (0,_queue_js__WEBPACK_IMPORTED_MODULE_4__/* .initQueue */ .C$)(GM);
-    (0,_downloader_js__WEBPACK_IMPORTED_MODULE_3__/* .initDownloader */ .aM)(GM);
+    (0,_downloader_js__WEBPACK_IMPORTED_MODULE_4__/* .initDownloader */ .aM)(GM);
 
-    // 1. Version Check
+    // 1. Version Check (Major Version Backwards Compatibility)
+    // "Maintain backward compatibility until major version bump"
     const currentLoaderVer = GM_context.loaderVersion || "1.0.0"; 
-    const compareVersions = (a, b) => {
-        const clean = v => String(v).replace(/^v/i, '').trim().split('-')[0].split('.').map(Number);
-        const [aParts, bParts] = [clean(a), clean(b)];
-        // console.log(`[TokiSync] Compare Ver: "${a}"(${aParts}) vs "${b}"(${bParts})`);
-        
-        for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-            const valA = aParts[i] || 0;
-            const valB = bParts[i] || 0;
-            if (valA > valB) return 1;
-            if (valA < valB) return -1;
-        }
-        return 0;
+    
+    const getMajor = (v) => {
+        const parts = String(v).replace(/^v/i, '').trim().split('.');
+        return parseInt(parts[0]) || 0;
     };
 
-    if (compareVersions(currentLoaderVer, _config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX) < 0) {
-        const msg = `❌ Loader is outdated! (Current: ${currentLoaderVer}, Required: ${_config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX})`;
+    const loaderMajor = getMajor(currentLoaderVer);
+    const requiredMajor = getMajor(_config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX);
+
+    // Only Fail if Loader is OLDER Major version (e.g. Loader v1 vs Core v2)
+    // If Loader is v2 and Core is v1, that's usually fine (forward compat?). 
+    // Usually Core requires Loader features.
+    if (loaderMajor < requiredMajor) {
+        const msg = `❌ Loader is outdated! (Current: ${currentLoaderVer}, Required Major: v${requiredMajor}.x)`;
         console.error(msg);
-        alert(`⚠️ 로더(Tampermonkey 스크립트) 업데이트가 필요합니다.\n최소 버전: ${_config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX}\n현재 버전: ${currentLoaderVer}\n\nGitHub에서 최신 버전을 설치해주세요.`);
+        alert(`⚠️ 로더(Tampermonkey 스크립트) 업데이트가 필요합니다.\n필수 버전: v${requiredMajor}.x 이상\n현재 버전: ${currentLoaderVer}\n\nGitHub에서 최신 버전을 설치해주세요.`);
         return; 
+    }
+    
+    // Log warning for Minor mismatch but proceed (Normalize 'v' prefix first)
+    const normalizeVer = (v) => String(v).replace(/^v/i, '').trim();
+    if (normalizeVer(currentLoaderVer) !== normalizeVer(_config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX)) {
+        console.warn(`⚠️ Version Mismatch (Soft): Loader ${currentLoaderVer} / Core wants ${_config_js__WEBPACK_IMPORTED_MODULE_0__/* .MIN_LOADER_VERSION */ .sX}. Proceeding due to Major match.`);
     }
 
     console.log(`🚀 TokiSync ${_config_js__WEBPACK_IMPORTED_MODULE_0__/* .CLIENT_VERSION */ .fZ} Loaded (Modular)`);
@@ -1035,29 +1351,94 @@ function main(GM_context) {
     else if (currentURL.match(/newtoki/)) { site = "뉴토끼"; detectedCategory = "Webtoon"; }
     else if (currentURL.match(/manatoki/)) { site = "마나토끼"; detectedCategory = "Manga"; }
 
-    const siteInfo = { site, workId, detectedCategory };
+    // Try to extract Work/Series ID
+    // Patterns:
+    // /webtoon/12345/title...
+    // /comic/123456
+    // /novel/123
+    const idMatch = currentURL.match(/\/(?:webtoon|comic|novel)\/([0-9]+)/);
+    if (idMatch) workId = idMatch[1];
+    
+    // Parse Full Series Info (Title, etc.)
+    const parsedSeries = (0,_parser_js__WEBPACK_IMPORTED_MODULE_3__/* .getSeriesInfo */ .Y)(workId, detectedCategory);
 
-    // 4. UI Injection (Menu Command)
-    GM_context.GM_registerMenuCommand("⚙️ 설정 열기", _ui_js__WEBPACK_IMPORTED_MODULE_2__/* .openSettings */ .Ow);
+    // Merge basic info with parsed details
+    const siteInfo = { 
+        site, 
+        workId, 
+        detectedCategory,
+        ...parsedSeries // includes fullTitle, cleanTitle, etc.
+    };
+
+    console.log(`[TokiSync] Info: ${siteInfo.cleanTitle} (ID: ${siteInfo.workId})`);
+
+    // 4. UI Injection (Menu Command) - Handled by Loader via returned API
+    // GM_context.GM_registerMenuCommand("⚙️ 설정 열기", openSettings);
 
     // 5. Auto Start Logic
     (0,_ui_js__WEBPACK_IMPORTED_MODULE_2__/* .initStatusUI */ .Vt)();
+    
+    // Check Content
+    if (site !== 'Unknown') {
+         console.log(`[TokiSync] Site detected: ${site}. Checking for list...`);
+         (0,_ui_js__WEBPACK_IMPORTED_MODULE_2__/* .injectDownloadButtons */ .Dr)(siteInfo);
+         // Start Worker in Background (Optional: User can trigger it manually via UI if needed)
+         // import('./worker.js').then(module => module.startWorker(false));
+    }
 
-    // Check if I am a Worker
+    // Check if I am a Dedicated Worker (Popup)
     if (window.name === 'TOKI_WORKER' || window.location.hash === '#toki_worker') {
+        // Dedicated worker logic might differ (e.g. strict focus)
         Promise.resolve(/* import() eager */).then(__webpack_require__.bind(__webpack_require__, 835)).then(module => {
-            module.startWorker();
+            module.startWorker(true); // Dedicated mode
         });
     }
 
-    // Expose Logic for Console Debugging
-    window.TokiSyncDebug = {
-        getConfig: _config_js__WEBPACK_IMPORTED_MODULE_0__/* .getConfig */ .zj,
+    // 6. Define Managers (Glue Logic)
+    const autoSyncDownloadManager = () => {
+        if(confirm(`[${siteInfo.site}] 전체 다운로드를 시작하시겠습니까?\n(이미 다운로드된 항목은 건너뛰거나 덮어쓸 수 있습니다)`)) {
+            (0,_downloader_js__WEBPACK_IMPORTED_MODULE_4__/* .tokiDownload */ .qc)(null, null, null, siteInfo);
+        }
+    };
+
+    const batchDownloadManager = () => {
+        const input = prompt("다운로드할 범위를 입력하세요 (예: 1-10 또는 5,7,9):");
+        if (!input) return;
+        
+        // Simple Parse
+        // Defaulting to passing range to tokiDownload if it supports it, 
+        // OR parsing here. tokiDownload supports (start, end, targetList).
+        
+        // For now, simple strict start/end or list
+        if (input.includes('-')) {
+            const [start, end] = input.split('-').map(Number);
+            (0,_downloader_js__WEBPACK_IMPORTED_MODULE_4__/* .tokiDownload */ .qc)(start, end, null, siteInfo);
+        } else if (input.includes(',')) {
+            const targets = input.split(',').map(Number);
+            (0,_downloader_js__WEBPACK_IMPORTED_MODULE_4__/* .tokiDownload */ .qc)(null, null, targets, siteInfo);
+        } else {
+            const num = parseInt(input);
+            if(num) (0,_downloader_js__WEBPACK_IMPORTED_MODULE_4__/* .tokiDownload */ .qc)(null, null, [num], siteInfo);
+        }
+    };
+
+    const manualDownloadManager = () => {
+        const url = prompt("다운로드할 에피소드 URL을 입력하세요:");
+        if (url) {
+            Promise.resolve(/* import() */).then(__webpack_require__.bind(__webpack_require__, 414)).then(m => m.tokiDownloadSingle({
+                url, title: "Manual Download", id: "manual", category: siteInfo.detectedCategory
+            }));
+        }
+    };
+
+    // Return API for Loader
+    return {
+        autoSyncDownloadManager,
         openDashboard: _ui_js__WEBPACK_IMPORTED_MODULE_2__/* .openDashboard */ .Nb,
-        getQueue: _queue_js__WEBPACK_IMPORTED_MODULE_4__/* .getQueue */ .IS,
-        enqueueTask: _queue_js__WEBPACK_IMPORTED_MODULE_4__/* .enqueueTask */ .UT,
-        startWorker: () => Promise.resolve(/* import() eager */).then(__webpack_require__.bind(__webpack_require__, 835)).then(m => m.startWorker()),
-        tokiDownload: (s, e) => (0,_downloader_js__WEBPACK_IMPORTED_MODULE_3__/* .tokiDownload */ .qc)(s, e, null, siteInfo)
+        openSettings: _ui_js__WEBPACK_IMPORTED_MODULE_2__/* .openSettings */ .Ow,
+        batchDownloadManager,
+        toggleDebugMode: _config_js__WEBPACK_IMPORTED_MODULE_0__/* .toggleDebug */ .Up,
+        manualDownloadManager
     };
 }
 

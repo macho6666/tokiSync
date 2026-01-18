@@ -27,6 +27,8 @@
 // @connect      raw.githubusercontent.com
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
+// @connect      127.0.0.1
+// @connect      localhost
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip-utils/0.1.0/jszip-utils.js
 // @run-at       document-end
@@ -105,7 +107,11 @@
      */
     async function checkAndLoadCore() {
         const pinnedVer = GM_getValue(PINNED_VER_KEY);
-        const latestVer = await fetchLatestVersion();
+        
+        // [MODIFIED] Disable Version Check requested by User
+        // const latestVer = await fetchLatestVersion();
+        const latestVer = pinnedVer || FALLBACK_VERSION;
+        console.log("🚫 Version Check Disabled (User Request) - Using Pinned/Fallback");
 
         // 1. 저장된 스크립트 확인
         const storedScript = GM_getValue(STORED_CORE_KEY, "");
@@ -202,11 +208,19 @@
      * @param {string} version - 다운로드할 버전
      * @param {boolean} [reloadAfter=false] - 다운로드 후 페이지 새로고침 여부
      */
+    const CFG_USE_LOCAL = "TOKI_USE_LOCAL_SOURCE";
+
     function fetchAndStoreScript(version, reloadAfter = false) {
-        // [Changed] Use Raw GitHub for instant updates (Bypass CDN delay)
-        const cdnUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${version}/${CORE_FILENAME}?t=${Date.now()}`;
+        const useLocal = GM_getValue(CFG_USE_LOCAL, false);
+        const sourceName = useLocal ? "Localhost" : "GitHub Raw";
         
-        console.log(`☁️ Fetching Core Script from: ${cdnUrl}`);
+        let cdnUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${version}/${CORE_FILENAME}?t=${Date.now()}`;
+        
+        if (useLocal) {
+            cdnUrl = `http://127.0.0.1:8080/${CORE_FILENAME}?t=${Date.now()}`;
+        }
+
+        console.log(`☁️ Fetching Core Script from [${sourceName}]: ${cdnUrl}`);
 
         GM_xmlhttpRequest({
             method: "GET",
@@ -221,26 +235,36 @@
                         return;
                     }
 
-                    console.log(`✅ Core Updated to ${version}`);
+                    console.log(`✅ Core Updated (${sourceName})`);
                     GM_setValue(STORED_CORE_KEY, scriptContent);
                     
                     if(reloadAfter) {
-                        alert(`[TokiSync] ${version} 업데이트 완료! 새로고침합니다.`);
+                        alert(`[TokiSync] ${version} (${sourceName}) 업데이트 완료! 새로고침합니다.`);
                         location.reload();
                     } else {
                         executeScript(scriptContent);
                     }
                 } else {
                     console.error("❌ Fetch Failed:", response.status);
-                    alert(`스크립트 다운로드 실패: ${response.status}`);
+                    alert(`스크립트 다운로드 실패: ${response.status}\nURL: ${cdnUrl}\n(로컬 서버가 켜져있는지 확인하세요: npx http-server docs --cors)`);
                 }
             },
             onerror: (e) => {
                 console.error("❌ Network Error", e);
-                alert("네트워크 오류 발생");
+                alert(`네트워크 오류 발생\nURL: ${cdnUrl}`);
             }
         });
     }
+
+    // [Dev Menu]
+    GM_registerMenuCommand("🔄 소스 전환 (GitHub <-> Localhost)", () => {
+        const current = GM_getValue(CFG_USE_LOCAL, false);
+        const next = !current;
+        GM_setValue(CFG_USE_LOCAL, next);
+        alert(`소스가 변경되었습니다: ${current ? "Localhost" : "GitHub"} -> ${next ? "Localhost" : "GitHub"}\n페이지를 새로고침하면 적용됩니다.`);
+        GM_deleteValue(STORED_CORE_KEY); // 강제 재다운로드 유도
+        location.reload();
+    });
 
     /**
      * 저장된 스크립트 문자열을 `new Function`으로 실행합니다.
@@ -254,7 +278,7 @@
 
             if (typeof window.TokiSyncCore === 'function') {
                 const coreApi = window.TokiSyncCore({
-                    loaderVersion: "3.1.0-beta.251218.0004", // Viewer Optimization Update
+                    loaderVersion: (typeof GM_info !== 'undefined' ? GM_info.script.version : "1.1.3"),
                     GM_registerMenuCommand: GM_registerMenuCommand,
                     GM_xmlhttpRequest: GM_xmlhttpRequest,
                     GM_setValue: GM_setValue,
