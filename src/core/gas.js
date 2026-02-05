@@ -1,4 +1,5 @@
 import { getConfig, isConfigValid } from './config.js';
+import { uploadDirect } from './network.js';
 
 function arrayBufferToBase64(buffer) {
     let binary = '';
@@ -9,12 +10,37 @@ function arrayBufferToBase64(buffer) {
 }
 
 /**
- * Uploads a Blob to Google Drive via GAS
+ * Uploads a Blob to Google Drive via Direct Access (primary) or GAS Relay (fallback)
  * @param {Blob} blob File content
  * @param {string} folderName Target folder name (e.g. "[123] Title")
  * @param {string} fileName Target file name (e.g. "[123] Title.zip")
  */
 export async function uploadToGAS(blob, folderName, fileName, options = {}) {
+    const config = getConfig();
+    if (!isConfigValid()) throw new Error("GAS 설정이 누락되었습니다. 메뉴에서 설정을 완료해주세요.");
+    
+    // Try Direct Upload first (Fixed: now uses Blob instead of String.fromCharCode)
+    try {
+        console.log('[Upload] Attempting Direct Drive API upload...');
+        await uploadDirect(blob, folderName, fileName, options);
+        console.log('[Upload] ✅ Direct upload succeeded');
+        return; // Success!
+    } catch (directError) {
+        console.warn('[Upload] ⚠️  Direct upload failed, falling back to GAS relay:', directError.message);
+    }
+    
+    // Fallback to GAS Relay
+    console.log('[Upload] Using GAS relay fallback...');
+    await uploadViaGASRelay(blob, folderName, fileName, options);
+}
+
+/**
+ * Legacy GAS Relay Upload (Fallback)
+ * @param {Blob} blob File content
+ * @param {string} folderName Target folder name
+ * @param {string} fileName Target file name
+ */
+async function uploadViaGASRelay(blob, folderName, fileName, options = {}) {
     const config = getConfig();
     if (!isConfigValid()) throw new Error("GAS 설정이 누락되었습니다. 메뉴에서 설정을 완료해주세요.");
     

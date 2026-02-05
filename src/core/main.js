@@ -13,10 +13,6 @@ export function main() {
     if (typeof GM_registerMenuCommand !== 'undefined') {
         GM_registerMenuCommand('설정', () => showConfigModal());
         GM_registerMenuCommand('로그창 토글', () => LogBox.getInstance().toggle());
-        GM_registerMenuCommand('설정 확인', () => {
-            const config = getConfig();
-            alert(`GAS URL: ${config.gasUrl}\nGoogle Drive 폴더 ID: ${config.folderId}\n다운로드 정책: ${config.policy}`);
-        });
 
         GM_registerMenuCommand('Viewer 열기 (설정 전송)', () => {
              const config = getConfig();

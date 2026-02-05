@@ -11,12 +11,12 @@ function checkDownloadHistory(data, rootFolderId) {
     rootFolderId,
     data.folderName,
     data.category,
-    false
+    false,
   );
 
   if (!seriesFolder) {
     Debug.log(
-      `❌ Folder not found in Root(${rootFolderId}) or Category(${data.category})`
+      `❌ Folder not found in Root(${rootFolderId}) or Category(${data.category})`,
     );
     return createRes("success", [], Debug.getLogs());
   }
@@ -77,7 +77,7 @@ function saveSeriesInfo(data, rootFolderId) {
     rootFolderId,
     data.folderName,
     data.category,
-    true
+    true,
   );
   // const root = DriveApp.getFolderById(rootFolderId); // Unused
 
@@ -174,13 +174,13 @@ function migrateLegacyStructure(rootFolderId) {
     rootFolderId,
     "Webtoon",
     "Webtoon",
-    true
+    true,
   ); // Ensure Cat Folder
   const novelFolder = getOrCreateSeriesFolder(
     rootFolderId,
     "Novel",
     "Novel",
-    true
+    true,
   ); // Ensure Cat Folder
 
   // Reuse helper? getOrCreateSeriesFolder creates Series folder.
@@ -263,7 +263,7 @@ function migrateLegacyStructure(rootFolderId) {
             const blob = Utilities.newBlob(
               Utilities.base64Decode(json.thumbnail),
               "image/jpeg",
-              "cover.jpg"
+              "cover.jpg",
             );
             folder.createFile(blob);
 
@@ -299,6 +299,53 @@ function migrateLegacyStructure(rootFolderId) {
   return createRes(
     "success",
     `Migration Complete. Moved: ${movedCount}, Thumbnails: ${fixedThumbnails}`,
-    Debug.getLogs()
+    Debug.getLogs(),
   );
+}
+
+// =======================================================
+// 🔑 Direct Drive Access Token Provider
+// =======================================================
+
+/**
+ * Provides OAuth Access Token for Client-Side Direct Drive Upload
+ *
+ * This endpoint enables the UserScript to bypass GAS relay and directly
+ * upload files to Google Drive using GM_xmlhttpRequest.
+ *
+ * Security: Token is valid for 1 hour and scoped to Drive access only.
+ *
+ * @returns {Object} Response with access token
+ */
+function view_get_token() {
+  Debug.log("🔑 view_get_token: Generating OAuth token");
+
+  try {
+    const token = ScriptApp.getOAuthToken();
+
+    if (!token) {
+      Debug.error("❌ Token generation failed");
+      return createRes(
+        "error",
+        "Failed to generate OAuth token",
+        Debug.getLogs(),
+      );
+    }
+
+    Debug.log("✅ Token generated successfully");
+
+    return createRes(
+      "success",
+      {
+        token: token,
+        expiresIn: 3600, // 1 hour (approximate)
+        scope: "https://www.googleapis.com/auth/drive",
+        timestamp: new Date().toISOString(),
+      },
+      Debug.getLogs(),
+    );
+  } catch (e) {
+    Debug.error("❌ Token generation error:", e);
+    return createRes("error", `Token Error: ${e.message}`, Debug.getLogs());
+  }
 }

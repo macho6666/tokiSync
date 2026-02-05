@@ -32,6 +32,10 @@ function View_Dispatcher(data) {
       const offset = data.offset || 0;
       const length = data.length || 10 * 1024 * 1024;
       resultBody = View_getFileChunk(data.fileId, offset, length);
+    } else if (action === "view_get_token") {
+      // Direct Drive Access: OAuth Token Provider
+      resultBody = view_get_token();
+      return resultBody; // Already wrapped by createRes in SyncService
     } else {
       throw new Error("Unknown Viewer Action: " + action);
     }

@@ -20,6 +20,12 @@ window.TOKI_VIEWER_VERSION = VIEWER_VERSION;
 
 let allSeries = [];
 
+// Thumbnail Loading Queue (Rate Limit Protection)
+const thumbnailQueue = [];
+let isLoadingThumbnail = false;
+const THUMBNAIL_DELAY_MS = 250; // 250ms between loads to avoid rate limiting
+
+
 // ============================================================
 // 1. Initialization & Handshake
 // ============================================================
@@ -198,6 +204,20 @@ function renderGrid(seriesList) {
         return;
     }
 
+    // Lazy Load Observer
+    const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                const url = img.dataset.thumb;
+                if (url && url !== NO_IMAGE_SVG) {
+                    queueThumbnail(img, url);
+                }
+                obs.unobserve(img);
+            }
+        });
+    }, { rootMargin: '200px' });
+
     allSeries.forEach((series, index) => {
         try {
             const card = document.createElement('div');
@@ -249,14 +269,10 @@ function renderGrid(seriesList) {
             // Lazy load thumbnail after card is added to DOM
             grid.appendChild(card);
             
-            // Load thumbnail with slight delay to avoid rate limiting
+            // Load thumbnail using Intersection Observer + Queue
             const img = card.querySelector('img.thumb');
             if (thumb !== NO_IMAGE_SVG) {
-                setTimeout(() => {
-                    if (!img.dataset.loaded) {
-                        img.src = thumb;
-                    }
-                }, index * 50); // Stagger loading by 50ms per image
+                observer.observe(img);
             }
         } catch (err) {
             console.error("Render Error:", err);
@@ -476,6 +492,43 @@ function getDynamicLink(series) {
     }
 
     return contentId ? (baseUrl + path + contentId) : "#";
+}
+
+// ============================================================
+// Thumbnail Queue System (Rate Limit Protection)
+// ============================================================
+
+/**
+ * Processes the next thumbnail in the queue with rate limiting
+ */
+function loadNextThumbnail() {
+    if (isLoadingThumbnail || thumbnailQueue.length === 0) return;
+    
+    isLoadingThumbnail = true;
+    const { img, url } = thumbnailQueue.shift();
+    
+    img.onload = () => {
+        img.dataset.loaded = 'true';
+        isLoadingThumbnail = false;
+        setTimeout(loadNextThumbnail, THUMBNAIL_DELAY_MS);
+    };
+    
+    img.onerror = () => {
+        isLoadingThumbnail = false;
+        setTimeout(loadNextThumbnail, THUMBNAIL_DELAY_MS);
+    };
+    
+    img.src = url;
+}
+
+/**
+ * Adds a thumbnail to the loading queue
+ * @param {HTMLImageElement} img - Image element
+ * @param {string} url - Thumbnail URL
+ */
+function queueThumbnail(img, url) {
+    thumbnailQueue.push({ img, url });
+    loadNextThumbnail(); // Start processing if not already running
 }
 
 /**

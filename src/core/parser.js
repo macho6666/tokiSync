@@ -1,5 +1,10 @@
 export function getListItems() {
-    return Array.from(document.querySelector('.list-body').querySelectorAll('li')).reverse();
+    const listBody = document.querySelector('.list-body');
+    if (!listBody) {
+        console.warn('[Parser] .list-body not found - unsupported page structure');
+        return [];
+    }
+    return Array.from(listBody.querySelectorAll('li')).reverse();
 }
 
 export function parseListItem(li) {

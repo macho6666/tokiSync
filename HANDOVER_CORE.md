@@ -1,66 +1,57 @@
-# Core Module Handover Report (v1.2.2)
+# Core Module Handover Report
 
-**Role:** Core Developer  
-**Scope:** `src/core/*` (Integrated `downloader.js`, `gas.js`, `ui.js`, etc.)  
-**Status:** **v1.2.2 Released** (Bug Fixes & Auto-Update)
-
----
-
-## 🚀 Released Changes (v1.2.2)
-
-### 1. Critical Bug Fixes (Completed)
-
-- **Filename Logic (Split Policy):**
-  - **Local Download:** `[ID] Title [1-100].cbz` (Added Range)
-  - **GAS Upload:** `0001 - 1화.cbz` (Removed Series Title for clean Drive structure)
-- **Title Parsing:**
-  - Fixed redundant title bug (`255 - 255 화` -> `255 화`) via improved Regex.
-- **Auto-Update:**
-  - Added `@updateURL` & `@downloadURL` pointing to GitHub `main` branch.
-
-### 2. Version Synchronization
-
-- **UserScript:** `v1.2.2` (Header)
-- **Internal Client:** `v1.2.2` (`gas.js` - `CLIENT_VERSION`)
-- **Package:** `v1.2.2` (`package.json`)
+**Current Version:** v1.2.2 (Released)  
+**Next Version:** v1.3.0 (Planned)  
+**Role:** Core Developer (Planner)
 
 ---
 
-## 🚨 Ongoing / Pending Tasks
+## 🚀 Status: v1.2.2 Released (Stable)
 
-### 1. [Optimization] Thumbnail Stability
+### Completed Fixes
 
-- **Issue:** The `main` branch viewer handles thumbnails more stably than `v1.2.0+` despite the same GAS backend.
-- **Plan:** Compare legacy vs current viewer code and port stability fixes (e.g., caching, pre-fetching strategies).
-- **Status:** **Postponed** (Focus was on critical filename bugs).
-
----
-
-## 🛠 Module Status Overview
-
-### `src/core/downloader.js`
-
-- **Status:** **Stable**
-- **Updates:** Implemented conditional filename logic for Local vs GAS.
-
-### `src/core/parser.js`
-
-- **Status:** **Stable**
-- **Updates:** Enhanced regex for cleaner title extraction.
-
-### `src/core/gas.js`
-
-- **Status:** **Stable**
-- **Updates:** Updated `CLIENT_VERSION` to match release.
-
-### `src/core/index.js`
-
-- **Status:** **Stable**
-- **Updates:** Handshake retry logic implemented (v1.2.1).
+1.  **Filename Logic**:
+    - Local: Added `[Start-End]` range to filenames.
+    - GAS Upload: Removed redundant series title from filenames.
+2.  **Title Parsing**: Fixed duplicate title bug (`255 - 255` -> `255`).
+3.  **Client Version**: Synced `CLIENT_VERSION` with UserScript version.
+4.  **Auto-Update**: Added Tampermonkey update headers.
 
 ---
 
-## 📝 Next Steps for Reviewer
+## 📋 Plan: v1.3.0 (Ready for Execution)
 
-1. **Verify Auto-Update:** Install v1.2.2 and check if Tampermonkey detects future updates.
-2. **Thumbnail Investigation:** Resume the postponed stability task.
+**Goal**: Boost performance (Direct Access) & Restore stability features.  
+**Blueprint**: See `implementation_plan.md` for full technical details.
+
+### 1. Direct Drive Access (Primary)
+
+- **Concept**: Bypass GAS Relay for both Upload/Download.
+- **Mechanism**:
+  - **Server**: Returns OAuth Token (`view_get_token`).
+  - **Client**: Uses `GM_xmlhttpRequest` + Host Permission to access `googleapis.com` directly.
+- **Fallback**: Keep existing GAS Relay logic for safety.
+
+### 2. Legacy Features Revival
+
+- **Anti-Sleep**: Background audio loop to prevent Chrome tab throttling.
+- **Captcha Detection**: Pause queue when Cloudflare/Anti-bot is detected.
+- **Sleep Policy Presets**:
+  - **Agile**: 1.0s ~ 4.0s (Default)
+  - **Cautious**: 1.25s ~ 5.0s
+  - **Thorough**: 1.5s ~ 6.0s
+
+### 3. Implementation Order (Recommended)
+
+1.  **Server (`SyncService.gs`)**: Add `view_get_token`.
+2.  **Common (`api_client.js`)**: Add `fetchDirect` bridge.
+3.  **Viewer (`fetcher.js`)**: Implement Direct Download with Fallback.
+4.  **Downloader (`gas.js`)**: Implement Direct Upload with Fallback.
+5.  **Downloader (`downloader.js`)**: Add Anti-Sleep & Captcha logic.
+
+---
+
+## 📂 Key Documents
+
+- **`implementation_plan.md`**: v1.3.0 Technical Spec & Work Item breakdown.
+- **`task.md`**: Active checklist.

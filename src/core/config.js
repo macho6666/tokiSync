@@ -2,17 +2,19 @@ export const CFG_URL_KEY = "TOKI_GAS_URL";
 export const CFG_FOLDER_ID = "TOKI_FOLDER_ID";
 export const CFG_POLICY_KEY = "TOKI_DOWNLOAD_POLICY";
 export const CFG_API_KEY = "TOKI_API_KEY";
+export const CFG_SLEEP_MODE = "TOKI_SLEEP_MODE";
 
 /**
  * Get current configuration
- * @returns {{gasUrl: string, folderId: string, policy: string}}
+ * @returns {{gasUrl: string, folderId: string, policy: string, apiKey: string, sleepMode: string}}
  */
 export function getConfig() {
     return {
         gasUrl: GM_getValue(CFG_URL_KEY, ""),
         folderId: GM_getValue(CFG_FOLDER_ID, ""),
         policy: GM_getValue(CFG_POLICY_KEY, "folderInCbz"),
-        apiKey: GM_getValue(CFG_API_KEY, "")
+        apiKey: GM_getValue(CFG_API_KEY, ""),
+        sleepMode: GM_getValue(CFG_SLEEP_MODE, "agile") // default: agile
     };
 }
 
@@ -129,6 +131,15 @@ export function showConfigModal() {
                 </select>
             </div>
 
+            <div class="toki-input-group">
+                <label class="toki-label">다운로드 속도</label>
+                <select id="toki-cfg-sleepmode" class="toki-select">
+                    <option value="agile">빠름 (1-3초)</option>
+                    <option value="cautious">신중 (2-5초)</option>
+                    <option value="thorough">철저 (3-8초)</option>
+                </select>
+            </div>
+
             <div class="toki-modal-footer">
                 <button id="toki-btn-cancel" class="toki-btn toki-btn-cancel">취소</button>
                 <button id="toki-btn-save" class="toki-btn toki-btn-save">저장</button>
@@ -141,6 +152,9 @@ export function showConfigModal() {
     // -- Logic --
     const policySelect = document.getElementById('toki-cfg-policy');
     if(policySelect) policySelect.value = config.policy;
+    
+    const sleepModeSelect = document.getElementById('toki-cfg-sleepmode');
+    if(sleepModeSelect) sleepModeSelect.value = config.sleepMode;
 
     document.getElementById('toki-btn-cancel').onclick = () => overlay.remove();
     
@@ -149,11 +163,13 @@ export function showConfigModal() {
         const newFolder = document.getElementById('toki-cfg-folder').value.trim();
         const newApiKey = document.getElementById('toki-cfg-apikey').value.trim();
         const newPolicy = document.getElementById('toki-cfg-policy').value;
+        const newSleepMode = document.getElementById('toki-cfg-sleepmode').value;
 
         setConfig(CFG_URL_KEY, newGas);
         setConfig(CFG_FOLDER_ID, newFolder);
         setConfig(CFG_API_KEY, newApiKey);
         setConfig(CFG_POLICY_KEY, newPolicy);
+        setConfig(CFG_SLEEP_MODE, newSleepMode);
 
         alert('설정이 저장되었습니다.');
         overlay.remove();

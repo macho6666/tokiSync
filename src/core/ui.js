@@ -3,6 +3,8 @@
  * Handles Logging Overlay and OS Notifications
  */
 
+import { startSilentAudio, stopSilentAudio, isAudioRunning } from './anti_sleep.js';
+
 export class LogBox {
     static instance = null;
 
@@ -64,6 +66,7 @@ export class LogBox {
             <div id="toki-logbox-header">
                 <span id="toki-logbox-title">TokiSync Log</span>
                 <div id="toki-logbox-controls">
+                    <span id="toki-btn-audio" title="백그라운드 모드" style="cursor:pointer;">🔊</span>
                     <span id="toki-btn-clear" title="Clear">🚫</span>
                     <span id="toki-btn-close" title="Hide">❌</span>
                 </div>
@@ -77,6 +80,28 @@ export class LogBox {
         
         document.getElementById('toki-btn-clear').onclick = () => this.clear();
         document.getElementById('toki-btn-close').onclick = () => this.hide();
+        
+        // Anti-Sleep Button
+        const audioBtn = document.getElementById('toki-btn-audio');
+        if (audioBtn) {
+            audioBtn.onclick = () => {
+                try {
+                    if (isAudioRunning()) {
+                        stopSilentAudio();
+                        audioBtn.textContent = '🔊';
+                        audioBtn.title = '백그라운드 모드 (꺼짐)';
+                        this.log('[Anti-Sleep] 백그라운드 모드 비활성화');
+                    } else {
+                        startSilentAudio();
+                        audioBtn.textContent = '🔇';
+                        audioBtn.title = '백그라운드 모드 (켜짐)';
+                        this.log('[Anti-Sleep] 백그라운드 모드 활성화', 'success');
+                    }
+                } catch (e) {
+                    this.error(`[Anti-Sleep] 실패: ${e.message}`);
+                }
+            };
+        }
     }
 
     static getInstance() {

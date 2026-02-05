@@ -4,6 +4,15 @@ import { detectSite } from './detector.js';
 import { EpubBuilder } from './epub.js';
 import { CbzBuilder } from './cbz.js';
 import { LogBox, Notifier } from './ui.js';
+import { getConfig } from './config.js';
+import { startSilentAudio, stopSilentAudio } from './anti_sleep.js';
+
+// Sleep Policy Presets
+const SLEEP_POLICIES = {
+    agile: { min: 1000, max: 3000 },      // 빠름 (1-3초)
+    cautious: { min: 2000, max: 5000 },   // 신중 (2-5초)
+    thorough: { min: 3000, max: 8000 }    // 철저 (3-8초)
+};
 
 // Processing Loop에 해당되는 로직을 분리 한다.
 export async function processItem(item, builder, siteInfo, iframe, seriesTitle = "") {
@@ -12,8 +21,10 @@ export async function processItem(item, builder, siteInfo, iframe, seriesTitle =
 
     await waitIframeLoad(iframe, item.src);
     
-    // Apply Random Sleep: 1000ms + (0~3000ms random)
-    await sleep(1000, 3000);
+    // Apply Dynamic Sleep based on Policy
+    const config = getConfig();
+    const policy = SLEEP_POLICIES[config.sleepMode] || SLEEP_POLICIES.agile;
+    await sleep(policy.min, policy.max);
     
     const iframeDoc = iframe.contentWindow.document;
 
@@ -37,8 +48,12 @@ export async function processItem(item, builder, siteInfo, iframe, seriesTitle =
             chapterTitleOnly = chapterTitleOnly.replace(seriesTitle, '').trim();
         }
 
-        // Construct clean folder name: "0001 1화"
-        const cleanChapterTitle = `${item.num} ${chapterTitleOnly}`;
+        // Extract chapter number from title (e.g. "12화" → "12")
+        const chapterMatch = chapterTitleOnly.match(/(\d+)화/);
+        const chapterNum = chapterMatch ? chapterMatch[1].padStart(4, '0') : item.num;
+        
+        // Construct clean folder name: "0012 12화" (using actual chapter number)
+        const cleanChapterTitle = `${chapterNum} ${chapterTitleOnly}`;
         builder.addChapter(cleanChapterTitle, images);
     }
 }
@@ -50,12 +65,21 @@ export async function tokiDownload(startIndex, lastIndex, policy = 'folderInCbz'
     logger.show();
     logger.log(`다운로드 시작 (정책: ${policy})...`);
 
+    // Auto-start Anti-Sleep mode
+    try {
+        startSilentAudio();
+        logger.success('[Anti-Sleep] 백그라운드 모드 자동 활성화');
+    } catch (e) {
+        logger.log('[Anti-Sleep] 자동 시작 실패 (사용자 상호작용 필요)', 'error');
+    }
+
     const siteInfo = detectSite();
     if (!siteInfo) {
         alert("지원하지 않는 사이트이거나 다운로드 페이지가 아닙니다.");
+        stopSilentAudio();
         return;
     }
-    const { site, protocolDomain } = siteInfo;
+    const { site, protocolDomain, category } = siteInfo;
     const isNovel = (site === "북토끼");
 
     try {
@@ -71,10 +95,7 @@ export async function tokiDownload(startIndex, lastIndex, policy = 'folderInCbz'
             destination = 'drive';
         }
         
-        // Determine Category for GAS
-        let category = 'Webtoon';
-        if (site === '북토끼') category = 'Novel';
-        else if (site === '마나토끼') category = 'Manga';
+        // Category from detectSite (Novel/Webtoon/Manga)
 
         if (buildingPolicy === 'folderInCbz') {
             if (isNovel) {
@@ -231,13 +252,21 @@ export async function tokiDownload(startIndex, lastIndex, policy = 'folderInCbz'
             await saveFile(masterZip, rootFolder, 'local', 'zip', { category }); 
         }
 
-        logger.success("모든 작업 완료!");
-        Notifier.notify("다운로드 완료", `${rootFolder} (${list.length} 항목)`);
+        logger.success(`✅ 다운로드 완료!`);
+        Notifier.notify('TokiSync', '다운로드 완료!');
 
     } catch (error) {
         console.error(error);
-        alert(`오류 발생: ${error.message}`);
-        LogBox.getInstance().error(error.message);
+        logger.error(`오류 발생: ${error.message}`);
+        alert(`다운로드 중 오류 발생:\n${error.message}`);
+    } finally {
+        // Auto-stop Anti-Sleep mode
+        stopSilentAudio();
+        logger.log('[Anti-Sleep] 백그라운드 모드 자동 종료');
+        
+        // Cleanup
+        const iframe = document.querySelector('iframe');
+        if (iframe) iframe.remove();
     }
 }
 
